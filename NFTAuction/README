@@ -1,0 +1,194 @@
+
+Goal:
+To sell/buy digital assets using smart contracts.
+
+Contract deployed links over ropstentest network :
+NFT Creation : 
+https://ropsten.etherscan.io/tx/0x3ca7475f7c1b8a627d7c00cafff59a8b57de140338220d8ef0ea2fcbf8acd057
+
+Miniting of NFT :
+TokenId 1 = https://ropsten.etherscan.io/tx/0x1eb34900b004c74a0aed1a6efb3640213fb01e79e0caada9c81a4266d1a1d3f0
+
+TokenId 2 = https://ropsten.etherscan.io/tx/0xe87219bff371eaf0cd0e1793e9d3063bf7cf647ffca20402c212ca4d1cb761c6
+
+Deployed Auction Contract : 
+https://ropsten.etherscan.io/tx/0xd7ea1f29fb00bdf9e14604449526239fcdccaebdc00eb0e9ca8cbe7706b63599
+
+Created Auction for NFT TokenID 0 :
+https://ropsten.etherscan.io/tx/0x8d14e74b7c8266f878cfdfdb2eee2aa068565a4109a72e5ca7e1dfc6b356b539
+
+
+A. Core idea:
+
+Steps involved :
+
+Create a NFT for a digital asset with Royalty implementation using ERC721 token. 
+Minting of NFT.
+Get Address of NFT.
+Create an auction for  NFT.
+Store bids applied by bidders, then calculate the maximum of them.
+Declaration winner of Auction.
+Transfer of Ownership.
+New owner can again create an auction for purchased nft, and will follow steps from 4-7.
+If the auction creator is not the NFT creator then he/she has to pay a royalty amount to the NFT creator.
+
+
+Register an ERC721 Non-Fungible Token 
+
+ERC721 tokens provide us a way to hold any NFT with metadata attached to it. To register a token we provide a unique tokenId and metadata(TokenURI). The metadata contains our valuable asset for which we want to create NFT .(The metadata can be configured using various methods like IPFS etc.)
+Minting of a NFT
+After uploading the metadata we do minting of a NFT , that puts our NFT to the ethereum  blockchain. After minting the owner can sell or a user can buy a minted NFT.
+Create Auction for NFT
+
+After the Minting Owner can put their NFT token for auction, It is a simple process where we pass the address of the NFT, Name of auction,initial price of bid and a time limit for which our auction will be live. Only the owner of NFT can create an auction for that NFT.
+
+Bid on Auction
+Anyone having a valid account can bid on an auction except the owner of the auction. Biding means that previous bidders are refunded and a new bid is placed if Bidder has provided a higher bid then previous. 
+Biding follows given conditions:
+Auction not expired
+Auction owner should not be the Bidder.
+Bid amount should be greater than current bid amount.
+ 
+Abortion of Auction
+If an auction is canceled, then it should return the bid applied by the bidder to them (if any).
+Bidder Won Auction
+If there is an auction winner, the NFT is transferred(i.e Ownership) to the bidder and the bid amount is sent to the auction creator. Also the royalty will be deducted from the previous owner’s account.
+Transfer Ownership of the NFT to the Winner
+The Auction Contract needs to verify that a NFT is owned by the auction creator, therefore before the auction is created,So after the end of auction the Ownership will be transferred to the winner of NFT.
+
+B. Implementation of Core Idea:
+
+ Pseudo code:
+
+Contract MyNFT {
+
+	int tokenIdCounter =0;
+	address nftCreator;	// address of nft creator or artist
+	int royalty_txt ;	// we are fixing it to some value and payer has to put
+//msg.value pay this
+	Mapping (address => bool )  excludedList; //list of royalty payer with value false
+	
+	Constructor(_royalty) ERC721("MyNFT", "MNFT" ) {  
+	nftCreator=msg.sender;
+	royalty_txt = _royalty;
+	excludedList[msg.sender] = true;
+}
+
+function _payRoyalty() public  payable {
+    require(msg.value > txFeeAmount , "enter value > txFeeAmount");
+    payable(nftCreator).transfer(msg.value); // pay royalty to artist;
+}
+
+function transferFrom(from,to,tokenId) {  // transfer of ownership of NFT
+require(isOwner(from,tokenId));
+
+if(excludedList[from]==false) {
+_payRoyalty()
+}
+_transfer(from,to,tokenId);
+}
+function mint onlyOwner  (to , tokenUri)  {	 //only owner can mint our NFT
+	tokenId=tokenIdCounter ;
+_safeMint(to,tokenId);
+_setTokenURI(tokenId,tokenUri);
+tokenIdCounter++; 
+}
+
+// for auction of this NFT ;
+
+struct Auction {  	// parameter of auction
+string Name;
+int deadline;
+int startingPrice;
+address owner;
+bool active;
+}
+struct Bid  { // parameter of Bid
+address from;
+int amount;
+}
+Mapping(int => Bid[]) 	auctionBids;  
+ // all bid will be matching to a particular token id
+
+Mapping(address=>int)  auctionOwner; // every token will have a owner;
+Auction[] auctions;		// all auction will be stored in auctions
+
+function createAuction OnlyOwner ( tokenId, auctionTitle, startPrice,blockDeadline)  {
+  
+     //creator should be owner
+        int auctionId = auctions.length;
+
+        Auction memory newAuction;  // create instance of auction to store all details
+        newAuction.name = auctionTitle;
+        newAuction.blockDeadline = block.timestamp + blockDeadline;
+        newAuction.startPrice = startPrice;
+        newAuction.tokenId = tokenId;
+        newAuction.owner = msg.sender;
+        newAuction.active = true;
+        auctions.push(newAuction);        
+        auctionOwner[msg.sender].push(auctionId);
+    }
+
+    function bidOnAuction(auctionId)  {
+        Bid_amount = msg.value;
+        Auction memory myAuction = auctions[_auctionId];
+        // owner can't bid on their auction
+        require(myAuction.owner != msg.sender,"owner cannot bid");
+        // check auction is valid 
+        require( block.timestamp <= myAuction.blockDeadline,"auction expired");
+        
+        bidsLength = auctionBids[_auctionId].length;
+        tempAmount = myAuction.startPrice; // previous bid price
+
+        Bid memory lastBid;       // if there is more bids then compare  
+
+        if( bidsLength > 0 ) {
+            lastBid = auctionBids[_auctionId][bidsLength - 1];
+            tempAmount = lastBid.amount;
+        }
+ // if amount is less than previous bid then revert it;
+        if( ethAmountSent < tempAmount ) revert(); 
+
+  // refund the last bidder
+        if( bidsLength > 0 ) {
+           payable(lastBid.from).transfer(lastBid.amount))
+           }
+        // insert bid 
+        Bid memory newBid;
+        newBid.from = msg.sender;
+        newBid.amount = ethAmountSent;
+        auctionBids[_auctionId].push(newBid);
+        payable(auctions[_auctionId].owner).transfer(ethAmountSent);
+    }
+
+    function cancelAuction(auctionId) isOwner (auctionId) {
+        int bidsLength = auctionBids[_auctionId].length;
+        // if there are bids refund the last bid
+        if( bidsLength > 0 ) {
+            Bid memory  lastBid = auctionBids[auctionId][bidsLength - 1];
+            payable(lastBid.from).transfer(lastBid.amount))
+           }
+            auctions[_auctionId].active = false;
+             }
+
+ function finalizeAuction(auctionId) public {
+        Auction memory myAuction = auctions[_auctionId];
+        int bidsLength = auctionBids[_auctionId].length;
+
+        // check if the auction has not ended then revert it.
+require(block.timestamp <= myAuction.blockDeadline,"auction is running");
+
+        // if there are no bids cancel
+        if(bidsLength == 0) {
+            cancelAuction(_auctionId);
+        }
+        else{
+ // approve and transfer from this contract to the bid winner             if(approveAndTransfer(myAuction.owner,lastBid.from,myAuction.tokenId)){
+                auctions[auctionId].active = false;
+                auctions[auctionId].finalized = true;
+            }
+        }
+
+
+}
+
